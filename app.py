@@ -107,14 +107,6 @@ def save_image(image, filename="processed_image.jpg"):
     cv2.imwrite(output_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
     return output_path
 
-# Función para crear un collage de ambas imágenes
-def create_collage(original_image, processed_image):
-    # Redimensionar ambas imágenes al mismo tamaño
-    processed_resized = cv2.resize(processed_image, (original_image.shape[1], original_image.shape[0]))
-    # Apilar las imágenes en una fila (horizontalmente)
-    collage = np.hstack((original_image, processed_resized))
-    return collage
-
 # Función para combinar la imagen procesada con la imagen de fondo seleccionada
 def combine_with_background(processed_image, background_image_path):
     background = cv2.imread(image_folder + background_image_path)
@@ -122,15 +114,16 @@ def combine_with_background(processed_image, background_image_path):
     combined = cv2.addWeighted(processed_image, 1, background_resized, 0.5, 0)
     return combined
 
-# Función para descargar ambas imágenes y generar un nombre único
+# Función para descargar la imagen combinada en un solo collage
 def download_images(original_image, processed_image, background_image):
-    # Crear collage de las imágenes
-    collage = create_collage(original_image, processed_image)
+    # Crear un collage con las tres imágenes
+    processed_resized = cv2.resize(processed_image, (original_image.shape[1], original_image.shape[0]))
     
-    # Si se seleccionó un fondo, combinarlo con la imagen procesada
-    if background_image:
-        combined_image = combine_with_background(processed_image, background_image)
-        collage = create_collage(original_image, combined_image)
+    # Solo aplicar fondo a la imagen combinada
+    combined_image = combine_with_background(processed_image, background_image)
+    
+    # Crear collage final con las tres imágenes (original, transformada, combinada con fondo)
+    collage = np.hstack((original_image, processed_resized, combined_image))
     
     # Guardar la imagen combinada (collage) con un nombre único
     output_path = save_image(collage, "collage_imagenes.jpg")
