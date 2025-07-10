@@ -1,6 +1,6 @@
 # RA - Aplicación de Manipulación de Imágenes
 
-**UNIVERSIDAD POLITECNICA DE CHIAPAS**  
+**UNIVERSIDAD POLITÉCNICA DE CHIAPAS**  
 **MULTIMEDIA Y DISEÑO DIGITAL**  
 **8° A**  
 
@@ -47,5 +47,26 @@ Para ejecutar este proyecto, asegúrate de tener las siguientes librerías insta
 1. Clona este repositorio o descarga el código fuente.
 2. Instala las dependencias con el siguiente comando:
 
-```bash
+bash
 pip install -r requirements.txt
+
+
+## Uso
+
+1. Clona este repositorio o descarga el archivo `app.py`.
+2. Ejecuta el archivo `app.py` con Python:
+
+```bash
+python app.py
+```
+
+3. Abre el navegador y ve a la URL `http://127.0.0.1:7860` para interactuar con la interfaz.
+4. Carga una imagen y comienza a aplicar las transformaciones disponibles, visualiza los resultados y descarga la imagen final procesada.
+
+## Funcionalidades Opcionales (Bonus)
+
+La aplicación también incluye funcionalidades avanzadas que añaden valor y creatividad:
+
+* **Detección de objetos usando Haar Cascades**: Detecta rostros, ojos y peatones en las imágenes cargadas.
+* **Reconocimiento de contornos y objetos**: Utiliza contornos para identificar y delimitar áreas en las imágenes.
+* **Detalles estadísticos de imagen**: Muestra información como el histograma, la media y la desviación estándar de la imagen.
