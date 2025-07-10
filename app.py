@@ -11,12 +11,13 @@ if not os.path.exists("descargas"):
 # Cargar imágenes desde una carpeta preestablecida
 image_folder = "images/"
 image_files = ["luis.jpg", "LUIS2.jpg", "LUIS3.jpg", "LUIS4.jpg"]  # Lista de imágenes
+background_images = ["1.jpeg", "2.jpeg", "3.jpeg"]  # Imágenes para fondo
 
 def load_image(image_path):
     img = cv2.imread(image_folder + image_path)
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-def process_image(image, rotation=0, flip=0, resize=(200, 200), brightness=0, contrast=1, filter_type="Mediana"):
+def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize_percentage_height=100, brightness=0, contrast=1, filter_type="Mediana", gamma=1.0, background_image=None):
     # Aplicar rotación
     rows, cols = image.shape[:2]
     M = cv2.getRotationMatrix2D((cols / 2, rows / 2), rotation, 1)
@@ -25,24 +26,75 @@ def process_image(image, rotation=0, flip=0, resize=(200, 200), brightness=0, co
     # Voltear la imagen
     flipped = cv2.flip(rotated, flip)
 
-    # Redimensionar la imagen
-    resized = cv2.resize(flipped, resize)
+    # Redimensionar la imagen por porcentaje
+    new_width = int(cols * (resize_percentage_width / 100))
+    new_height = int(rows * (resize_percentage_height / 100))
+    resized = cv2.resize(flipped, (new_width, new_height))
 
     # Ajuste de brillo y contraste
     adjusted = cv2.convertScaleAbs(resized, alpha=contrast, beta=brightness)
 
+    # Corrección Gamma
+    gamma_corrected = np.array(255 * (adjusted / 255) ** gamma, dtype='uint8')
+
+    # Asegurarse de que los valores estén dentro del rango [0, 255]
+    gamma_corrected = np.clip(gamma_corrected, 0, 255)
+
     # Aplicación de filtros
     if filter_type == "Mediana":
-        filtered = cv2.medianBlur(adjusted, 5)
+        filtered = cv2.medianBlur(gamma_corrected, 5)
     elif filter_type == "Gaussiano":
-        filtered = cv2.GaussianBlur(adjusted, (5, 5), 0)
+        filtered = cv2.GaussianBlur(gamma_corrected, (5, 5), 0)
     elif filter_type == "Bilateral":
-        filtered = cv2.bilateralFilter(adjusted, 9, 75, 75)
+        filtered = cv2.bilateralFilter(gamma_corrected, 9, 75, 75)
     elif filter_type == "Detección de bordes":
-        filtered = cv2.Canny(adjusted, 100, 200)
+        filtered = cv2.Canny(gamma_corrected, 100, 200)
     elif filter_type == "Enfocar":
         kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-        filtered = cv2.filter2D(adjusted, -1, kernel)
+        filtered = cv2.filter2D(gamma_corrected, -1, kernel)
+    elif filter_type == "Media":
+        filtered = cv2.blur(gamma_corrected, (5, 5))
+    elif filter_type == "Sobel":
+        grad_x = cv2.Sobel(gamma_corrected, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gamma_corrected, cv2.CV_64F, 0, 1, ksize=3)
+        filtered = cv2.magnitude(grad_x, grad_y)
+        filtered = cv2.convertScaleAbs(filtered)  # Convertir los valores a uint8
+    elif filter_type == "Scharr":
+        grad_x = cv2.Scharr(gamma_corrected, cv2.CV_64F, 1, 0)
+        grad_y = cv2.Scharr(gamma_corrected, cv2.CV_64F, 0, 1)
+        filtered = cv2.magnitude(grad_x, grad_y)
+        filtered = cv2.convertScaleAbs(filtered)  # Convertir los valores a uint8
+    elif filter_type == "Dilatación":
+        kernel = np.ones((5, 5), np.uint8)
+        filtered = cv2.dilate(gamma_corrected, kernel, iterations=1)
+    elif filter_type == "Erosión":
+        kernel = np.ones((5, 5), np.uint8)
+        filtered = cv2.erode(gamma_corrected, kernel, iterations=1)
+    elif filter_type == "Contornos":
+        gray = cv2.cvtColor(gamma_corrected, cv2.COLOR_RGB2GRAY)
+        contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        filtered = cv2.drawContours(gamma_corrected.copy(), contours, -1, (0, 255, 0), 3)
+    elif filter_type == "Umbral":
+        _, filtered = cv2.threshold(gamma_corrected, 127, 255, cv2.THRESH_BINARY)
+    
+    # Ecualización de Histograma
+    if filter_type == "Ecualización":
+        gray_image = cv2.cvtColor(gamma_corrected, cv2.COLOR_RGB2GRAY)
+        filtered = cv2.equalizeHist(gray_image)
+
+    # Mejoramiento de detalles (realce)
+    if filter_type == "Realce":
+        kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+        filtered = cv2.filter2D(gamma_corrected, -1, kernel)
+    
+    # Si el fondo no es None, aplicar el cambio de fondo
+    if background_image is not None:
+        background = cv2.imread(image_folder + background_image)  # Cargar imagen de fondo desde la lista
+        background_resized = cv2.resize(background, (new_width, new_height))
+        mask = cv2.inRange(filtered, 1, 255)
+        result = cv2.bitwise_and(filtered, filtered, mask=mask)
+        background_part = cv2.bitwise_and(background_resized, background_resized, mask=mask)
+        filtered = cv2.add(result, background_part)
 
     return filtered
 
@@ -72,6 +124,24 @@ def create_collage(original_image, processed_image):
     collage = np.hstack((original_image, processed_resized))
     return collage
 
+# Función para realizar la segmentación por HSV y LAB
+def remove_background(image):
+    # Segmentación por HSV
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    lower_bound = np.array([35, 43, 46])
+    upper_bound = np.array([99, 255, 255])
+    mask = cv2.inRange(hsv, lower_bound, upper_bound)
+    hsv_segmented = cv2.bitwise_and(image, image, mask=mask)
+
+    # Segmentación por LAB
+    lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    lower_bound_lab = np.array([0, 0, 0])
+    upper_bound_lab = np.array([255, 255, 255])
+    mask_lab = cv2.inRange(lab, lower_bound_lab, upper_bound_lab)
+    lab_segmented = cv2.bitwise_and(image, image, mask=mask_lab)
+
+    return hsv_segmented, lab_segmented
+
 # Función para descargar ambas imágenes y generar un nombre único
 def download_images(original_image, processed_image):
     # Crear collage de las imágenes
@@ -90,26 +160,23 @@ with gr.Blocks() as demo:
         image_display = gr.Image(label="Imagen Original", elem_id="image_display")
 
     with gr.Row():
-        # Botón para cargar y mostrar la imagen seleccionada
-        load_button = gr.Button("Cargar Imagen para Transformar")
-
-    with gr.Row():
         # Controles para modificar la imagen
         rotation_slider = gr.Slider(-180, 180, step=1, label="Rotación de la imagen")
         flip_slider = gr.Slider(0, 1, step=1, label="Voltear la imagen (0: Horizontal, 1: Vertical)")
-        resize_width = gr.Slider(50, 500, step=10, label="Redimensionar (Ancho)")
-        resize_height = gr.Slider(50, 500, step=10, label="Redimensionar (Alto)")
+        resize_percentage_width_slider = gr.Slider(10, 200, step=1, label="Redimensionar por porcentaje de Ancho (%)", value=100)
+        resize_percentage_height_slider = gr.Slider(10, 200, step=1, label="Redimensionar por porcentaje de Altura (%)", value=100)
         brightness_slider = gr.Slider(-100, 100, step=1, label="Brillo de la imagen")
         contrast_slider = gr.Slider(1, 3, step=0.1, label="Contraste de la imagen")
-        filter_dropdown = gr.Dropdown(choices=["Imagen Original", "Mediana", "Gaussiano", "Bilateral", "Detección de bordes", "Enfocar"], label="Selecciona un filtro")
-
-    with gr.Row():
-        # Botón para aplicar transformaciones
-        apply_button = gr.Button("Aplicar Transformaciones")
+        filter_dropdown = gr.Dropdown(choices=["Imagen Original", "Mediana", "Gaussiano", "Bilateral", "Detección de bordes", "Enfocar", "Media", "Sobel", "Scharr", "Dilatación", "Erosión", "Contornos", "Umbral", "Ecualización", "Realce"], label="Selecciona un filtro")
+        gamma_slider = gr.Slider(0.1, 3.0, step=0.1, label="Corrección Gamma")
 
     with gr.Row():
         # Mostrar la imagen procesada
         processed_image = gr.Image(label="Imagen Procesada")
+
+    with gr.Row():
+        # Campo para seleccionar la imagen de fondo (opcional) en la parte inferior
+        background_dropdown = gr.Dropdown(choices=background_images, label="Selecciona una imagen de fondo", interactive=True, value=None)
 
     with gr.Row():
         # Botón para descargar las imágenes (original + procesada)
@@ -117,14 +184,14 @@ with gr.Blocks() as demo:
         download_output = gr.File(label="Descargar Imágenes", visible=False)  # Usamos el componente gr.File para la descarga
 
     # Lógica para cargar la imagen y aplicar transformaciones
-    def apply_transformations(image_path, rotation, flip, resize_width, resize_height, brightness, contrast, filter_type):
+    def apply_transformations(image_path, rotation, flip, resize_percentage_width, resize_percentage_height, brightness, contrast, filter_type, gamma, background_image):
         image = load_image(image_path)
         
         # Si se selecciona "Imagen Original", no aplicar ninguna transformación
         if filter_type == "Imagen Original":
             transformed_image = image
         else:
-            transformed_image = process_image(image, rotation, flip, (resize_width, resize_height), brightness, contrast, filter_type)
+            transformed_image = process_image(image, rotation, flip, resize_percentage_width, resize_percentage_height, brightness, contrast, filter_type, gamma, background_image)
         
         return image, transformed_image  # Devolver tanto la imagen original como la procesada
 
@@ -136,10 +203,30 @@ with gr.Blocks() as demo:
 
     # Enlazar los eventos
     image_input.change(display_image, inputs=image_input, outputs=image_display)
-    load_button.click(display_image, inputs=image_input, outputs=image_display)  # Cargar automáticamente la imagen cuando se presione el botón
-    apply_button.click(apply_transformations, 
-                       inputs=[image_input, rotation_slider, flip_slider, resize_width, resize_height, brightness_slider, contrast_slider, filter_dropdown], 
+    rotation_slider.change(apply_transformations, 
+                           inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
+                           outputs=[image_display, processed_image])
+    flip_slider.change(apply_transformations, 
+                       inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
                        outputs=[image_display, processed_image])
+    resize_percentage_width_slider.change(apply_transformations, 
+                                           inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
+                                           outputs=[image_display, processed_image])
+    resize_percentage_height_slider.change(apply_transformations, 
+                                            inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
+                                            outputs=[image_display, processed_image])
+    brightness_slider.change(apply_transformations, 
+                             inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
+                             outputs=[image_display, processed_image])
+    contrast_slider.change(apply_transformations, 
+                           inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
+                           outputs=[image_display, processed_image])
+    filter_dropdown.change(apply_transformations, 
+                           inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
+                           outputs=[image_display, processed_image])
+    gamma_slider.change(apply_transformations, 
+                        inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
+                        outputs=[image_display, processed_image])
     download_button.click(download_file, inputs=[image_display, processed_image], outputs=download_output)
 
 # Iniciar la aplicación
