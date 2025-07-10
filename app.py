@@ -48,7 +48,9 @@ def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize
     elif filter_type == "Bilateral":
         filtered = cv2.bilateralFilter(gamma_corrected, 9, 75, 75)
     elif filter_type == "Detección de bordes":
-        filtered = cv2.Canny(gamma_corrected, 100, 200)
+        # Convertir la imagen a escala de grises antes de aplicar Canny
+        gray_image = cv2.cvtColor(gamma_corrected, cv2.COLOR_RGB2GRAY)
+        filtered = cv2.Canny(gray_image, 100, 200)  # Aplicar detección de bordes con Canny
     elif filter_type == "Enfocar":
         kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
         filtered = cv2.filter2D(gamma_corrected, -1, kernel)
@@ -79,8 +81,11 @@ def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize
     
     # Ecualización de Histograma
     if filter_type == "Ecualización":
+        # Convertir la imagen a escala de grises antes de ecualizar
         gray_image = cv2.cvtColor(gamma_corrected, cv2.COLOR_RGB2GRAY)
         filtered = cv2.equalizeHist(gray_image)
+        # Después de la ecualización, convertir la imagen de nuevo a color si es necesario
+        filtered = cv2.cvtColor(filtered, cv2.COLOR_GRAY2RGB)
 
     # Mejoramiento de detalles (realce)
     if filter_type == "Realce":
