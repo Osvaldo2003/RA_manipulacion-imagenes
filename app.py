@@ -13,8 +13,9 @@ image_folder = "images/"
 image_files = ["luis.jpg", "LUIS2.jpg", "LUIS3.jpg", "LUIS4.jpg"]  # Lista de imágenes
 background_images = ["1.jpeg", "2.jpeg", "3.jpeg"]  # Imágenes para fondo
 
-# Cargar el clasificador Haar Cascade para detección de rostros
+# Cargar los clasificadores Haar cascades pre-entrenados para la detección de objetos
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
 
 def load_image(image_path):
     img = cv2.imread(image_folder + image_path)
@@ -44,6 +45,7 @@ def convert_color(image, color_space):
         return cv2.cvtColor(image, cv2.COLOR_LAB2RGB)
     return image
 
+# Función para aplicar transformaciones a la imagen
 def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize_percentage_height=100, brightness=0, contrast=1, filter_type="Mediana", gamma=1.0):
     # Aplicar rotación
     rows, cols = image.shape[:2]
@@ -67,8 +69,8 @@ def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize
     # Asegurarse de que los valores estén dentro del rango [0, 255]
     gamma_corrected = np.clip(gamma_corrected, 0, 255)
 
-    # Inicializar la variable filtered
-    filtered = gamma_corrected  # En caso de que no se aplique un filtro, se usará la imagen ajustada
+    # Inicialización de la variable filtered para prevenir UnboundLocalError
+    filtered = gamma_corrected
 
     # Aplicación de filtros
     if filter_type == "Mediana":
@@ -137,15 +139,50 @@ def combine_with_background(processed_image, background_image_path):
     combined = cv2.addWeighted(processed_image, 1, background_resized, 0.5, 0)
     return combined
 
-# Función para detectar rostros en la imagen utilizando Haar Cascade
+# Función para detectar objetos con Haar cascades
 def detect_faces(image):
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-    
+    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
     for (x, y, w, h) in faces:
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Dibuja un rectángulo alrededor del rostro
-    
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
     return image
+
+def detect_eyes(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    eyes = eye_cascade.detectMultiScale(gray)
+    for (x, y, w, h) in eyes:
+        cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 0), 2)
+    return image
+
+# Función para calcular detalles estadísticos de la imagen
+def image_statistics(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
+    mean = np.mean(gray)
+    std_dev = np.std(gray)
+    return hist, mean, std_dev
+
+# Función para realizar segmentación avanzada con GrabCut
+def grabcut_segmentation(image):
+    img = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)  # Convertir a BGR
+    mask = np.zeros(img.shape[:2], np.uint8)  # Máscara inicial
+    background = np.zeros_like(img, np.uint8)  # Fondo inicial
+    foreground = np.zeros_like(img, np.uint8)  # Primer plano inicial
+    
+    # Rectángulo inicial para definir el área de interés
+    rect = (10, 10, img.shape[1]-10, img.shape[0]-10)
+    
+    # El modelo debe ser inicializado, crea un modelo vacío
+    model = np.zeros((1, 65), np.float64)
+    
+    # Aplicar GrabCut con inicialización del rectángulo
+    cv2.grabCut(img, mask, rect, background, foreground, 5, cv2.GC_INIT_WITH_RECT)
+    
+    # Cambiar el valor de la máscara para mejorar la segmentación
+    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
+    img = img * mask2[:, :, np.newaxis]
+    
+    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 # Función para descargar la imagen combinada en un solo collage
 def download_images(original_image, processed_image, background_image):
@@ -174,7 +211,7 @@ with gr.Blocks() as demo:
         resize_percentage_height_slider = gr.Slider(10, 200, step=1, label="Redimensionar por porcentaje de Altura (%)", value=100)
         brightness_slider = gr.Slider(-100, 100, step=1, label="Brillo de la imagen")
         contrast_slider = gr.Slider(1, 3, step=0.1, label="Contraste de la imagen")
-        filter_dropdown = gr.Dropdown(choices=["Imagen Original", "Mediana", "Gaussiano", "Bilateral", "Detección de bordes", "Enfocar", "Media", "Sobel", "Scharr", "Dilatación", "Erosión", "Contornos", "Umbral", "Ecualización", "Realce", "Detección de rostros"], label="Selecciona un filtro")
+        filter_dropdown = gr.Dropdown(choices=["Imagen Original", "Mediana", "Gaussiano", "Bilateral", "Detección de bordes", "Enfocar", "Media", "Sobel", "Scharr", "Dilatación", "Erosión", "Contornos", "Umbral", "Ecualización", "Realce", "GrabCut", "Detección de rostros", "Detección de ojos"], label="Selecciona un filtro")
         gamma_slider = gr.Slider(0.1, 3.0, step=0.1, label="Corrección Gamma")
         
         # Nuevo dropdown para selección de espacio de color
@@ -211,15 +248,22 @@ with gr.Blocks() as demo:
         if color_space != "Ninguno":
             transformed_image = convert_color(transformed_image, color_space) 
         
-        # Aplicar la detección de rostros si se selecciona el filtro de "Detección de rostros"
-        if filter_type == "Detección de rostros":
-            transformed_image = detect_faces(transformed_image)
-        
         # Si se selecciona un fondo, combinarlo con la imagen transformada
         if background_image:
             combined_image = combine_with_background(transformed_image, background_image)
         else:
             combined_image = transformed_image
+        
+        # Si se selecciona la segmentación GrabCut
+        if filter_type == "GrabCut":
+            transformed_image = grabcut_segmentation(transformed_image)
+        
+        # Si se selecciona la detección de objetos
+        if filter_type == "Detección de rostros":
+            transformed_image = detect_faces(transformed_image)
+        
+        if filter_type == "Detección de ojos":
+            transformed_image = detect_eyes(transformed_image)
         
         return image, transformed_image, combined_image
 
