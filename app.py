@@ -13,6 +13,9 @@ image_folder = "images/"
 image_files = ["luis.jpg", "LUIS2.jpg", "LUIS3.jpg", "LUIS4.jpg"]  # Lista de imágenes
 background_images = ["1.jpeg", "2.jpeg", "3.jpeg"]  # Imágenes para fondo
 
+# Cargar el clasificador Haar Cascade para detección de rostros
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
 def load_image(image_path):
     img = cv2.imread(image_folder + image_path)
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -63,6 +66,9 @@ def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize
 
     # Asegurarse de que los valores estén dentro del rango [0, 255]
     gamma_corrected = np.clip(gamma_corrected, 0, 255)
+
+    # Inicializar la variable filtered
+    filtered = gamma_corrected  # En caso de que no se aplique un filtro, se usará la imagen ajustada
 
     # Aplicación de filtros
     if filter_type == "Mediana":
@@ -131,6 +137,16 @@ def combine_with_background(processed_image, background_image_path):
     combined = cv2.addWeighted(processed_image, 1, background_resized, 0.5, 0)
     return combined
 
+# Función para detectar rostros en la imagen utilizando Haar Cascade
+def detect_faces(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    
+    for (x, y, w, h) in faces:
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Dibuja un rectángulo alrededor del rostro
+    
+    return image
+
 # Función para descargar la imagen combinada en un solo collage
 def download_images(original_image, processed_image, background_image):
     processed_resized = cv2.resize(processed_image, (original_image.shape[1], original_image.shape[0]))
@@ -158,7 +174,7 @@ with gr.Blocks() as demo:
         resize_percentage_height_slider = gr.Slider(10, 200, step=1, label="Redimensionar por porcentaje de Altura (%)", value=100)
         brightness_slider = gr.Slider(-100, 100, step=1, label="Brillo de la imagen")
         contrast_slider = gr.Slider(1, 3, step=0.1, label="Contraste de la imagen")
-        filter_dropdown = gr.Dropdown(choices=["Imagen Original", "Mediana", "Gaussiano", "Bilateral", "Detección de bordes", "Enfocar", "Media", "Sobel", "Scharr", "Dilatación", "Erosión", "Contornos", "Umbral", "Ecualización", "Realce"], label="Selecciona un filtro")
+        filter_dropdown = gr.Dropdown(choices=["Imagen Original", "Mediana", "Gaussiano", "Bilateral", "Detección de bordes", "Enfocar", "Media", "Sobel", "Scharr", "Dilatación", "Erosión", "Contornos", "Umbral", "Ecualización", "Realce", "Detección de rostros"], label="Selecciona un filtro")
         gamma_slider = gr.Slider(0.1, 3.0, step=0.1, label="Corrección Gamma")
         
         # Nuevo dropdown para selección de espacio de color
@@ -194,6 +210,10 @@ with gr.Blocks() as demo:
         # Aplicar la conversión de color automáticamente, si el usuario elige transformaciones que lo requieran
         if color_space != "Ninguno":
             transformed_image = convert_color(transformed_image, color_space) 
+        
+        # Aplicar la detección de rostros si se selecciona el filtro de "Detección de rostros"
+        if filter_type == "Detección de rostros":
+            transformed_image = detect_faces(transformed_image)
         
         # Si se selecciona un fondo, combinarlo con la imagen transformada
         if background_image:
