@@ -17,7 +17,7 @@ def load_image(image_path):
     img = cv2.imread(image_folder + image_path)
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize_percentage_height=100, brightness=0, contrast=1, filter_type="Mediana", gamma=1.0, background_image=None):
+def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize_percentage_height=100, brightness=0, contrast=1, filter_type="Mediana", gamma=1.0):
     # Aplicar rotación
     rows, cols = image.shape[:2]
     M = cv2.getRotationMatrix2D((cols / 2, rows / 2), rotation, 1)
@@ -86,15 +86,6 @@ def process_image(image, rotation=0, flip=0, resize_percentage_width=100, resize
     if filter_type == "Realce":
         kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
         filtered = cv2.filter2D(gamma_corrected, -1, kernel)
-    
-    # Si el fondo no es None, aplicar el cambio de fondo
-    if background_image is not None:
-        background = cv2.imread(image_folder + background_image)  # Cargar imagen de fondo desde la lista
-        background_resized = cv2.resize(background, (new_width, new_height))
-        mask = cv2.inRange(filtered, 1, 255)
-        result = cv2.bitwise_and(filtered, filtered, mask=mask)
-        background_part = cv2.bitwise_and(background_resized, background_resized, mask=mask)
-        filtered = cv2.add(result, background_part)
 
     return filtered
 
@@ -124,28 +115,22 @@ def create_collage(original_image, processed_image):
     collage = np.hstack((original_image, processed_resized))
     return collage
 
-# Función para realizar la segmentación por HSV y LAB
-def remove_background(image):
-    # Segmentación por HSV
-    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-    lower_bound = np.array([35, 43, 46])
-    upper_bound = np.array([99, 255, 255])
-    mask = cv2.inRange(hsv, lower_bound, upper_bound)
-    hsv_segmented = cv2.bitwise_and(image, image, mask=mask)
-
-    # Segmentación por LAB
-    lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
-    lower_bound_lab = np.array([0, 0, 0])
-    upper_bound_lab = np.array([255, 255, 255])
-    mask_lab = cv2.inRange(lab, lower_bound_lab, upper_bound_lab)
-    lab_segmented = cv2.bitwise_and(image, image, mask=mask_lab)
-
-    return hsv_segmented, lab_segmented
+# Función para combinar la imagen procesada con la imagen de fondo seleccionada
+def combine_with_background(processed_image, background_image_path):
+    background = cv2.imread(image_folder + background_image_path)
+    background_resized = cv2.resize(background, (processed_image.shape[1], processed_image.shape[0]))
+    combined = cv2.addWeighted(processed_image, 1, background_resized, 0.5, 0)
+    return combined
 
 # Función para descargar ambas imágenes y generar un nombre único
-def download_images(original_image, processed_image):
+def download_images(original_image, processed_image, background_image):
     # Crear collage de las imágenes
     collage = create_collage(original_image, processed_image)
+    
+    # Si se seleccionó un fondo, combinarlo con la imagen procesada
+    if background_image:
+        combined_image = combine_with_background(processed_image, background_image)
+        collage = create_collage(original_image, combined_image)
     
     # Guardar la imagen combinada (collage) con un nombre único
     output_path = save_image(collage, "collage_imagenes.jpg")
@@ -171,8 +156,12 @@ with gr.Blocks() as demo:
         gamma_slider = gr.Slider(0.1, 3.0, step=0.1, label="Corrección Gamma")
 
     with gr.Row():
-        # Mostrar la imagen procesada
-        processed_image = gr.Image(label="Imagen Procesada")
+        # Mostrar la imagen transformada antes de combinarla
+        transformed_image_display = gr.Image(label="Imagen Transformada")
+
+    with gr.Row():
+        # Mostrar la imagen combinada con fondo
+        combined_image_display = gr.Image(label="Imagen Combinada")
 
     with gr.Row():
         # Campo para seleccionar la imagen de fondo (opcional) en la parte inferior
@@ -191,43 +180,49 @@ with gr.Blocks() as demo:
         if filter_type == "Imagen Original":
             transformed_image = image
         else:
-            transformed_image = process_image(image, rotation, flip, resize_percentage_width, resize_percentage_height, brightness, contrast, filter_type, gamma, background_image)
+            transformed_image = process_image(image, rotation, flip, resize_percentage_width, resize_percentage_height, brightness, contrast, filter_type, gamma)
         
-        return image, transformed_image  # Devolver tanto la imagen original como la procesada
+        # Si se selecciona un fondo, combinarlo con la imagen transformada
+        if background_image:
+            combined_image = combine_with_background(transformed_image, background_image)
+        else:
+            combined_image = transformed_image
+        
+        return image, transformed_image, combined_image  # Devolver la imagen original, la transformada y la combinada
 
     # Lógica para descarga de ambas imágenes (incluyendo collage)
-    def download_file(original_image, processed_image):
+    def download_file(original_image, processed_image, background_image):
         # Crear collage y devolver el archivo guardado
-        saved_image_path = download_images(original_image, processed_image)
+        saved_image_path = download_images(original_image, processed_image, background_image)
         return saved_image_path
 
     # Enlazar los eventos
     image_input.change(display_image, inputs=image_input, outputs=image_display)
     rotation_slider.change(apply_transformations, 
                            inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                           outputs=[image_display, processed_image])
+                           outputs=[image_display, transformed_image_display, combined_image_display])
     flip_slider.change(apply_transformations, 
                        inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                       outputs=[image_display, processed_image])
+                       outputs=[image_display, transformed_image_display, combined_image_display])
     resize_percentage_width_slider.change(apply_transformations, 
                                            inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                                           outputs=[image_display, processed_image])
+                                           outputs=[image_display, transformed_image_display, combined_image_display])
     resize_percentage_height_slider.change(apply_transformations, 
                                             inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                                            outputs=[image_display, processed_image])
+                                            outputs=[image_display, transformed_image_display, combined_image_display])
     brightness_slider.change(apply_transformations, 
                              inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                             outputs=[image_display, processed_image])
+                             outputs=[image_display, transformed_image_display, combined_image_display])
     contrast_slider.change(apply_transformations, 
                            inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                           outputs=[image_display, processed_image])
+                           outputs=[image_display, transformed_image_display, combined_image_display])
     filter_dropdown.change(apply_transformations, 
                            inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                           outputs=[image_display, processed_image])
+                           outputs=[image_display, transformed_image_display, combined_image_display])
     gamma_slider.change(apply_transformations, 
                         inputs=[image_input, rotation_slider, flip_slider, resize_percentage_width_slider, resize_percentage_height_slider, brightness_slider, contrast_slider, filter_dropdown, gamma_slider, background_dropdown], 
-                        outputs=[image_display, processed_image])
-    download_button.click(download_file, inputs=[image_display, processed_image], outputs=download_output)
+                        outputs=[image_display, transformed_image_display, combined_image_display])
+    download_button.click(download_file, inputs=[image_display, transformed_image_display, background_dropdown], outputs=download_output)
 
 # Iniciar la aplicación
 demo.launch(server_name="127.0.0.1", server_port=7860)
