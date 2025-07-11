@@ -301,5 +301,5 @@ with gr.Blocks() as demo:
                         outputs=[image_display, transformed_image_display, combined_image_display])
     download_button.click(download_file, inputs=[image_display, transformed_image_display, background_dropdown], outputs=download_output)
 
-# Iniciar la aplicación
+
 demo.launch(server_name="127.0.0.1", server_port=7860)

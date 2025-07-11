@@ -11,12 +11,12 @@
 
 Esta aplicación permite realizar diversas operaciones de procesamiento de imágenes de manera interactiva. A través de una interfaz desarrollada con **Gradio**, los usuarios pueden cargar imágenes y aplicar transformaciones en tiempo real, como ajustes de brillo y contraste, rotación, redimensionamiento, y más. También pueden aplicar filtros personalizados (como mediana, Gaussiano, y bilateral) y combinar imágenes con fondos seleccionados. Además, permite la descarga de las imágenes procesadas de forma rápida y eficiente, lo que facilita un flujo de trabajo sencillo y accesible para todos los usuarios.
 
-### Características principales:
-- **Interactividad**: Los usuarios pueden modificar la imagen a través de controles dinámicos.
-- **Previsualización en tiempo real**: Ver los efectos de las modificaciones al instante.
-- **Descarga de imágenes**: Permite descargar las imágenes procesadas como una imagen final con las modificaciones realizadas.
+#Características principales:
+-**Interactividad**: Los usuarios pueden modificar la imagen a través de controles dinámicos.
+-**Previsualización en tiempo real**: Ver los efectos de las modificaciones al instante.
+-**Descarga de imágenes**: Permite descargar las imágenes procesadas como una imagen final con las modificaciones realizadas.
 
-## Funcionalidades
+## Funcionalidades 
 
 - **Carga de imágenes**: Selecciona una imagen de una lista predefinida para cargarla y procesarla.
 - **Transformaciones de imagen**:  
@@ -60,8 +60,8 @@ pip install -r requirements.txt
 python app.py
 ```
 
-3. Abre el navegador y ve a la URL `http://127.0.0.1:7860` para interactuar con la interfaz.
-4. Carga una imagen y comienza a aplicar las transformaciones disponibles, visualiza los resultados y descarga la imagen final procesada.
+3.Abre el navegador y ve a la URL `http://127.0.0.1:7860` para interactuar con la interfaz.
+4.Carga una imagen y comienza a aplicar las transformaciones disponibles, visualiza los resultados y descarga la imagen final procesada.
 
 ## Funcionalidades Opcionales (Bonus)
 
